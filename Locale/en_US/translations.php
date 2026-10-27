@@ -38,4 +38,9 @@ return array(
     'A token was generated on %s. It cannot be displayed again; reset it to obtain a new one.' => 'A token was generated on %s. It cannot be displayed again; reset it to obtain a new one.',
     'Reset token' => 'Reset token',
     'Token regenerated.' => 'Token regenerated.',
+    'This token is unrestricted: it can read and change every project without any user permission check. Bind it to a user to apply that user\'s project roles.' => 'This token is unrestricted: it can read and change every project without any user permission check. Bind it to a user to apply that user\'s project roles.',
+    'This token acts as %s and is limited to that user\'s projects and roles.' => 'This token acts as %s and is limited to that user\'s projects and roles.',
+    'Act as user' => 'Act as user',
+    'Unrestricted (no user, all projects)' => 'Unrestricted (no user, all projects)',
+    'The MCP client gets exactly the project access and roles of the selected user. Tasks and comments are attributed to that user.' => 'The MCP client gets exactly the project access and roles of the selected user. Tasks and comments are attributed to that user.',
 );

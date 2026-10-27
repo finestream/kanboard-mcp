@@ -158,6 +158,13 @@ check(is_string($second) && $second !== $token, 'regeneration produces a differe
 check($model->validateToken($token) === false, 'old token is deactivated');
 check($model->validateToken($second) === true, 'new token validates');
 check(count(array_filter($db->rows, fn($r) => (int) $r['is_active'] === 1)) === 1, 'exactly one active row');
+check(($model->findActiveTokenRow($second)['user_id'] ?? null) === 0, 'token generated without a user is unrestricted (user_id 0)');
+check($model->findActiveTokenRow('nope') === null, 'findActiveTokenRow is null for a wrong token');
+
+$bound = $model->generateToken(5);
+check(is_string($bound) && ($model->findActiveTokenRow($bound)['user_id'] ?? null) === 5, 'token bound to user 5 reports user_id 5');
+check(($model->getActiveToken()['user_id'] ?? null) === 5, 'getActiveToken exposes the bound user id');
+check(!array_key_exists('token', $model->getActiveToken()), 'getActiveToken still exposes no secret');
 
 echo "\n$checks checks, $failures failed\n";
 exit($failures === 0 ? 0 : 1);
