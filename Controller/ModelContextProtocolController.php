@@ -345,7 +345,20 @@ class ModelContextProtocolController extends Base
     {
         $this->ensureTablesExist();
 
-        // POST form from the Integrations panel; getValues() validates the CSRF token.
+        if (! $this->request->isPost()) {
+            // The Integrations page wraps plugin panels in its own <form>, so the
+            // selector lives in a modal (loaded here) that posts back to this action.
+            $activeToken = $this->mcpTokenModel->getActiveToken();
+
+            $this->response->html($this->template->render('ModelContextProtocol:config/token_modal', [
+                'values' => ['user_id' => (int) ($activeToken['user_id'] ?? 0)],
+                'users' => [0 => t('Unrestricted (no user, all projects)')] + $this->userModel->getActiveUsersList(),
+                'has_token' => $activeToken !== null,
+            ]));
+            return;
+        }
+
+        // Modal form submission; getValues() validates the CSRF token.
         $values = $this->request->getValues();
         if ($values === []) {
             throw new AccessForbiddenException();
