@@ -263,7 +263,7 @@ class ModelContextProtocolController extends Base
         
         $this->response->html($this->helper->layout->config('modelcontextprotocol:config/integration', [
             'title' => 'Model Context Protocol Settings',
-            'tokens' => $this->mcpTokenModel->getAll(),
+            'token' => $this->mcpTokenModel->getActiveToken(),
             'mcp_url' => $this->getMcpUrl()
         ]));
     }
@@ -287,7 +287,11 @@ class ModelContextProtocolController extends Base
             throw new AccessForbiddenException();
         }
 
-        if ($this->mcpTokenModel->generateToken()) {
+        $token = $this->mcpTokenModel->generateToken();
+
+        if ($token !== false) {
+            // Shown once on the Integrations page; only the hash is stored.
+            session_set('mcpNewToken', $token);
             $this->flash->success(t('Token regenerated.'));
         } else {
             $this->flash->failure(t('Unable to generate MCP token'));
