@@ -2,7 +2,13 @@
 
 namespace Kanboard\Plugin\ModelContextProtocol\Schema;
 
-const VERSION = 3;
+const VERSION = 4;
+
+function version_4($pdo)
+{
+    // Several tokens may be active at once; a label tells them apart.
+    $pdo->exec("ALTER TABLE mcp_tokens ADD COLUMN label VARCHAR(255) NOT NULL DEFAULT ''");
+}
 
 function version_3($pdo)
 {

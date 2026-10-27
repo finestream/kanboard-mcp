@@ -1,7 +1,8 @@
 <?php
 declare(strict_types=1);
 
-// McpTokenModel stores only a hash of the token and validates in constant time.
+// McpTokenModel stores only a hash of each token, validates in constant time
+// and keeps several tokens active at once.
 // Run: php tests/McpTokenModelTest.php
 
 namespace Kanboard\Core {
@@ -75,6 +76,11 @@ final class FakeTable
         return $this;
     }
 
+    public function asc(string $column): self
+    {
+        return $this;
+    }
+
     private function matches(array $row): bool
     {
         foreach ($this->conditions as [$column, $value]) {
@@ -138,33 +144,40 @@ $db = new FakeDb();
 $model = new McpTokenModel(new ArrayObject(['db' => $db]));
 
 check($model->tokenExists() === false, 'no token at start');
-check($model->getActiveToken() === null, 'no active token row at start');
+check($model->getAllActive() === [], 'no active token rows at start');
 check($model->validateToken('anything') === false, 'nothing validates without a token');
 
-$token = $model->generateToken();
+$token = $model->generateToken(0, '  Claude Desktop  ');
 check(is_string($token) && preg_match('/^[0-9a-f]{64}$/', $token) === 1, 'generateToken returns a 64-hex token');
 check(count($db->rows) === 1 && $db->rows[0]['token'] !== $token, 'the token itself is not stored');
 check($db->rows[0]['token'] === hash('sha256', $token), 'stored value is the SHA-256 hash');
+check($db->rows[0]['label'] === 'Claude Desktop', 'label is stored trimmed');
 check($model->validateToken($token) === true, 'the token validates');
 check($model->validateToken(hash('sha256', $token)) === false, 'the stored hash does not validate as a token');
 check($model->validateToken(strtoupper($token)) === false, 'case-changed token is rejected');
 check($model->validateToken('') === false && $model->validateToken(null) === false && $model->validateToken(['x']) === false, 'empty/null/array input is rejected');
 check($model->tokenExists() === true, 'tokenExists after generation');
-$row = $model->getActiveToken();
-check(is_array($row) && !array_key_exists('token', $row) && isset($row['created_at']), 'getActiveToken returns no secret');
+$rows = $model->getAllActive();
+check(count($rows) === 1 && !array_key_exists('token', $rows[0]) && isset($rows[0]['created_at']) && $rows[0]['label'] === 'Claude Desktop', 'getAllActive returns label and date but no secret');
 
-$second = $model->generateToken();
-check(is_string($second) && $second !== $token, 'regeneration produces a different token');
-check($model->validateToken($token) === false, 'old token is deactivated');
-check($model->validateToken($second) === true, 'new token validates');
-check(count(array_filter($db->rows, fn($r) => (int) $r['is_active'] === 1)) === 1, 'exactly one active row');
-check(($model->findActiveTokenRow($second)['user_id'] ?? null) === 0, 'token generated without a user is unrestricted (user_id 0)');
+$second = $model->generateToken(5, 'Cursor');
+check(is_string($second) && $second !== $token, 'second token is different');
+check($model->validateToken($token) === true, 'first token stays valid when a second one is generated');
+check($model->validateToken($second) === true, 'second token validates');
+check(count($model->getAllActive()) === 2, 'two active rows');
+check(($model->findActiveTokenRow($token)['user_id'] ?? null) === 0, 'first token is unrestricted (user_id 0)');
+check(($model->findActiveTokenRow($second)['user_id'] ?? null) === 5, 'second token is bound to user 5');
 check($model->findActiveTokenRow('nope') === null, 'findActiveTokenRow is null for a wrong token');
+check(($model->getActiveById(2)['label'] ?? null) === 'Cursor' && !array_key_exists('token', $model->getActiveById(2)), 'getActiveById returns the row without the secret');
+check($model->getActiveById(99) === null, 'getActiveById is null for an unknown id');
 
-$bound = $model->generateToken(5);
-check(is_string($bound) && ($model->findActiveTokenRow($bound)['user_id'] ?? null) === 5, 'token bound to user 5 reports user_id 5');
-check(($model->getActiveToken()['user_id'] ?? null) === 5, 'getActiveToken exposes the bound user id');
-check(!array_key_exists('token', $model->getActiveToken()), 'getActiveToken still exposes no secret');
+check($model->revoke(1) === true, 'revoke the first token');
+check($model->validateToken($token) === false, 'revoked token no longer validates');
+check($model->validateToken($second) === true, 'other token unaffected by the revocation');
+check(count($model->getAllActive()) === 1 && $model->getAllActive()[0]['id'] === 2, 'only the second row is active');
+check($model->revoke(1) === false && $model->revoke(99) === false, 'revoking an inactive or unknown token reports false');
+$long = $model->generateToken(0, str_repeat('x', 150));
+check(strlen($db->rows[2]['label']) === 100, 'label is cut to 100 characters');
 
 echo "\n$checks checks, $failures failed\n";
 exit($failures === 0 ? 0 : 1);

@@ -8,9 +8,17 @@
     // exactly once; only its hash is stored in the database.
     $newToken = session_get('mcpNewToken');
     session_remove('mcpNewToken');
-    $activeToken = $this->task->mcpTokenModel->getActiveToken();
-    $boundUserId = (int) ($activeToken['user_id'] ?? 0);
-    $boundUser = $boundUserId > 0 ? $this->task->userModel->getById($boundUserId) : null;
+    $tokens = $this->task->mcpTokenModel->getAllActive();
+    $usersById = array();
+    foreach ($this->task->userModel->getAll() as $u) {
+        $usersById[(int) $u['id']] = $u;
+    }
+    $hasUnrestricted = false;
+    foreach ($tokens as $row) {
+        if ((int) $row['user_id'] === 0) {
+            $hasUnrestricted = true;
+        }
+    }
     $mcpUrl = $this->helper->url->base() . '?controller=ModelContextProtocolController&action=handle&plugin=ModelContextProtocol';
     ?>
     
@@ -18,13 +26,9 @@
     <div class="alert alert-success">
         <p><?= t('New token generated. Copy it now: it is stored hashed and will not be shown again.') ?></p>
     </div>
-    <?php elseif ($activeToken !== null): ?>
-    <p><?= t('A token was generated on %s. It cannot be displayed again; reset it to obtain a new one.', $this->dt->datetime((int) $activeToken['created_at'])) ?></p>
-    <?php else: ?>
-    <p><?= t('No MCP token has been generated yet. Generate a token to enable MCP access.') ?></p>
     <?php endif ?>
 
-    <?php if ($newToken !== null || $activeToken !== null): ?>
+    <?php if ($newToken !== null || $tokens !== array()): ?>
     <div class="form-group">
         <label><strong><?= t('MCP Client Configuration') ?></strong></label>
         <textarea readonly 
@@ -43,18 +47,45 @@
         <p class="form-help"><?= t('Copy this configuration to your MCP client settings (e.g., Claude Desktop app config). The token is sent as an Authorization header.') ?></p>
     </div>
     <?php endif ?>
-    
-    <?php if ($activeToken !== null && $boundUser === null): ?>
+
+    <?php if ($tokens === array()): ?>
+    <p><?= t('No MCP token has been generated yet. Generate a token to enable MCP access.') ?></p>
+    <?php else: ?>
+    <table class="table-striped table-scrolling">
+        <tr>
+            <th><?= t('Label') ?></th>
+            <th><?= t('Acts as') ?></th>
+            <th><?= t('Created') ?></th>
+            <th></th>
+        </tr>
+        <?php foreach ($tokens as $row): ?>
+        <?php $boundUser = isset($usersById[(int) $row['user_id']]) ? $usersById[(int) $row['user_id']] : null ?>
+        <tr>
+            <td><?= $row['label'] !== '' ? $this->text->e($row['label']) : '<em>' . t('token #%d', $row['id']) . '</em>' ?></td>
+            <td>
+                <?php if ((int) $row['user_id'] === 0): ?>
+                    <strong><?= t('Unrestricted') ?></strong>
+                <?php elseif ($boundUser === null): ?>
+                    <em><?= t('deleted user #%d', $row['user_id']) ?></em>
+                <?php else: ?>
+                    <?= $this->text->e($boundUser['name'] ?: $boundUser['username']) ?>
+                    <?php if ((int) $boundUser['is_active'] !== 1): ?><em>(<?= t('disabled') ?>)</em><?php endif ?>
+                <?php endif ?>
+            </td>
+            <td><?= $this->dt->datetime((int) $row['created_at']) ?></td>
+            <td><?= $this->modal->confirm('trash-o', t('Revoke'), 'ModelContextProtocolController', 'confirmRevokeToken', array('plugin' => 'ModelContextProtocol', 'token_id' => $row['id'])) ?></td>
+        </tr>
+        <?php endforeach ?>
+    </table>
+    <?php endif ?>
+
+    <?php if ($hasUnrestricted): ?>
     <div class="alert alert-warning">
-        <p><strong><?= t('Security Note:') ?></strong> <?= t('This token is unrestricted: it can read and change every project without any user permission check. Bind it to a user to apply that user\'s project roles.') ?></p>
-    </div>
-    <?php elseif ($boundUser !== null): ?>
-    <div class="alert alert-info">
-        <p><strong><?= t('This token acts as %s and is limited to that user\'s projects and roles.', $boundUser['username']) ?></strong></p>
+        <p><strong><?= t('Security Note:') ?></strong> <?= t('An unrestricted token can read and change every project without any user permission check. Prefer tokens bound to a user.') ?></p>
     </div>
     <?php endif ?>
 
     <p>
-        <?= $this->modal->mediumButton('refresh', $activeToken !== null ? t('Reset token') : t('Generate Token'), 'ModelContextProtocolController', 'generateToken', array('plugin' => 'ModelContextProtocol')) ?>
+        <?= $this->modal->mediumButton('plus', t('Add token'), 'ModelContextProtocolController', 'generateToken', array('plugin' => 'ModelContextProtocol')) ?>
     </p>
 </div>

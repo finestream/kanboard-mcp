@@ -282,7 +282,7 @@ class ModelContextProtocolController extends Base
         
         $this->response->html($this->helper->layout->config('modelcontextprotocol:config/integration', [
             'title' => 'Model Context Protocol Settings',
-            'token' => $this->mcpTokenModel->getActiveToken(),
+            'tokens' => $this->mcpTokenModel->getAllActive(),
             'mcp_url' => $this->getMcpUrl()
         ]));
     }
@@ -305,12 +305,9 @@ class ModelContextProtocolController extends Base
         if (! $this->request->isPost()) {
             // The Integrations page wraps plugin panels in its own <form>, so the
             // selector lives in a modal (loaded here) that posts back to this action.
-            $activeToken = $this->mcpTokenModel->getActiveToken();
-
             $this->response->html($this->template->render('ModelContextProtocol:config/token_modal', [
-                'values' => ['user_id' => (int) ($activeToken['user_id'] ?? 0)],
+                'values' => ['user_id' => 0, 'label' => ''],
                 'users' => [0 => t('Unrestricted (no user, all projects)')] + $this->userModel->getActiveUsersList(),
-                'has_token' => $activeToken !== null,
             ]));
             return;
         }
@@ -328,12 +325,12 @@ class ModelContextProtocolController extends Base
             return;
         }
 
-        $token = $this->mcpTokenModel->generateToken($userId);
+        $token = $this->mcpTokenModel->generateToken($userId, (string) ($values['label'] ?? ''));
 
         if ($token !== false) {
             // Shown once on the Integrations page; only the hash is stored.
             session_set('mcpNewToken', $token);
-            $this->flash->success(t('Token regenerated.'));
+            $this->flash->success(t('Token generated.'));
         } else {
             $this->flash->failure(t('Unable to generate MCP token'));
         }
@@ -341,6 +338,41 @@ class ModelContextProtocolController extends Base
         $this->response->redirect($this->helper->url->to('ConfigController', 'integrations'));
     }
     
+    /**
+     * Confirmation modal before revoking a token
+     */
+    public function confirmRevokeToken()
+    {
+        $row = $this->mcpTokenModel->getActiveById($this->request->getIntegerParam('token_id'));
+        if ($row === null) {
+            throw new AccessForbiddenException();
+        }
+
+        $this->response->html($this->template->render('ModelContextProtocol:config/token_revoke', [
+            'row' => $row,
+            'user' => (int) $row['user_id'] > 0 ? $this->userModel->getById((int) $row['user_id']) : null,
+        ]));
+    }
+
+    /**
+     * Revoke one token (csrf_token in the query string, as for core confirm dialogs)
+     */
+    public function revokeToken()
+    {
+        // Same check as BaseController::checkCSRFParam(); this controller extends Core\Base.
+        if (! $this->token->validateCSRFToken($this->request->getStringParam('csrf_token'))) {
+            throw new AccessForbiddenException();
+        }
+
+        if ($this->mcpTokenModel->revoke($this->request->getIntegerParam('token_id'))) {
+            $this->flash->success(t('Token revoked.'));
+        } else {
+            $this->flash->failure(t('Unable to revoke this token.'));
+        }
+
+        $this->response->redirect($this->helper->url->to('ConfigController', 'integrations'));
+    }
+
     /**
      * Get MCP URL
      */

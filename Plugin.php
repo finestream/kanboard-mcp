@@ -22,7 +22,7 @@ class Plugin extends Base
         // token). Token management stays admin-only; anything else falls back
         // to Kanboard's default role.
         $this->applicationAccessMap->add('ModelContextProtocolController', 'handle', Role::APP_PUBLIC);
-        $this->applicationAccessMap->add('ModelContextProtocolController', array('settings', 'generateToken'), Role::APP_ADMIN);
+        $this->applicationAccessMap->add('ModelContextProtocolController', array('settings', 'generateToken', 'confirmRevokeToken', 'revokeToken'), Role::APP_ADMIN);
     }
 
     public function onStartup()
