@@ -22,7 +22,7 @@ class Plugin extends Base
         $this->applicationAccessMap->add('ModelContextProtocolController', '*', Role::APP_PUBLIC);
         
         // But require admin access for token generation
-        $this->applicationAccessMap->add('ModelContextProtocolController', 'generateToken', Role::APP_ADMIN);
+        $this->applicationAccessMap->add('ModelContextProtocolController', array('generateToken', 'confirmRevokeToken', 'revokeToken'), Role::APP_ADMIN);
     }
 
     public function onStartup()
