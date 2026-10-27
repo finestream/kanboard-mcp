@@ -2,7 +2,13 @@
 
 namespace Kanboard\Plugin\ModelContextProtocol\Schema;
 
-const VERSION = 2;
+const VERSION = 3;
+
+function version_3($pdo)
+{
+    // Optional Kanboard user the token acts as (0 = unrestricted).
+    $pdo->exec('ALTER TABLE mcp_tokens ADD COLUMN user_id INT DEFAULT 0');
+}
 
 function version_2($pdo)
 {
