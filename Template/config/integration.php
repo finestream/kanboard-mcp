@@ -54,11 +54,7 @@
     </div>
     <?php endif ?>
 
-    <form method="post" action="<?= $this->url->href('ModelContextProtocolController', 'generateToken', array('plugin' => 'ModelContextProtocol')) ?>" autocomplete="off">
-        <?= $this->form->csrf() ?>
-        <?= $this->form->label(t('Act as user'), 'user_id') ?>
-        <?= $this->form->select('user_id', array(0 => t('Unrestricted (no user, all projects)')) + $this->task->userModel->getActiveUsersList(), array('user_id' => $boundUserId)) ?>
-        <p class="form-help"><?= t('The MCP client gets exactly the project access and roles of the selected user. Tasks and comments are attributed to that user.') ?></p>
-        <button type="submit" class="btn btn-red"><?= $activeToken !== null ? t('Reset token') : t('Generate Token') ?></button>
-    </form>
+    <p>
+        <?= $this->modal->mediumButton('refresh', $activeToken !== null ? t('Reset token') : t('Generate Token'), 'ModelContextProtocolController', 'generateToken', array('plugin' => 'ModelContextProtocol')) ?>
+    </p>
 </div>
