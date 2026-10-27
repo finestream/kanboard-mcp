@@ -144,6 +144,40 @@ class McpServer extends Base
     }
 
     /**
+     * Users the token may see. Unrestricted and admin tokens get every
+     * account, as the Kanboard user list is admin-only. A bound user gets the
+     * members (direct or via groups) of the projects they belong to, which is
+     * what the UI shows them in assignee lists.
+     *
+     * @return list<array<string, mixed>>
+     */
+    private function getVisibleUsers(): array
+    {
+        $users = array_values($this->container['userModel']->getAll());
+
+        if (!$this->isScoped() || $this->isAppAdmin()) {
+            return $users;
+        }
+
+        $visible = [$this->userId => true];
+        foreach ($this->getVisibleProjects() as $project) {
+            if (!empty($project['is_everybody_allowed'])) {
+                return $users;
+            }
+            $projectId = (int) $project['id'];
+            $members = array_merge(
+                $this->container['projectUserRoleModel']->getUsers($projectId),
+                $this->container['projectGroupRoleModel']->getUsers($projectId)
+            );
+            foreach ($members as $member) {
+                $visible[(int) $member['id']] = true;
+            }
+        }
+
+        return array_values(array_filter($users, fn (array $user): bool => isset($visible[(int) ($user['id'] ?? 0)])));
+    }
+
+    /**
      * Handle MCP JSON-RPC request
      */
     public function handleRequest(array $request): ?array
@@ -500,7 +534,7 @@ class McpServer extends Base
             ],
             [
                 'name' => 'get_users',
-                'description' => 'Get all users in the system',
+                'description' => 'Get the users visible to this token (all users for unrestricted or admin tokens, otherwise the members of the bound user\'s projects)',
                 'inputSchema' => [
                     'type' => 'object',
                     'additionalProperties' => false,
@@ -1117,7 +1151,7 @@ class McpServer extends Base
                     break;
 
                 case 'get_users':
-                    $users = $this->container['userModel']->getAll();
+                    $users = $this->getVisibleUsers();
                     $result = array_values($users);
                     break;
 
@@ -2104,7 +2138,7 @@ class McpServer extends Base
                     break;
 
                 case 'kanboard://users':
-                    $users = $this->container['userModel']->getAll();
+                    $users = $this->getVisibleUsers();
                     $content = json_encode(array_values($users), JSON_PRETTY_PRINT);
                     break;
 

@@ -55,6 +55,11 @@ final class FakeUserModel
     {
         return $this->users[(int) $id] ?? null;
     }
+
+    public function getAll(): array
+    {
+        return $this->users;
+    }
 }
 
 final class FakeProjectUserRoleModel
@@ -65,6 +70,26 @@ final class FakeProjectUserRoleModel
     public function getUserRole($projectId, $userId): string
     {
         return $this->roles[(int) $projectId][(int) $userId] ?? '';
+    }
+
+    public function getUsers($projectId): array
+    {
+        $out = [];
+        foreach ($this->roles[(int) $projectId] ?? [] as $userId => $role) {
+            $out[] = ['id' => $userId, 'role' => $role];
+        }
+        return $out;
+    }
+}
+
+final class FakeProjectGroupRoleModel
+{
+    /** @var array<int, list<int>> project => user ids reachable through a group */
+    public array $members = [];
+
+    public function getUsers($projectId): array
+    {
+        return array_map(fn (int $id): array => ['id' => $id, 'role' => 'project-member'], $this->members[(int) $projectId] ?? []);
     }
 }
 
@@ -179,6 +204,8 @@ $users->users = [
     1 => ['id' => 1, 'username' => 'admin', 'role' => 'app-admin'],
     2 => ['id' => 2, 'username' => 'bob', 'role' => 'app-user'],
     3 => ['id' => 3, 'username' => 'mia', 'role' => 'app-manager'],
+    4 => ['id' => 4, 'username' => 'zed', 'role' => 'app-user'],
+    5 => ['id' => 5, 'username' => 'grp', 'role' => 'app-user'],
 ];
 
 $roles = new FakeProjectUserRoleModel();
@@ -186,10 +213,14 @@ $roles->roles = [
     1 => [2 => 'project-member', 3 => 'project-manager'],
     2 => [2 => 'project-viewer'],
     3 => [2 => 'qa-custom-role'],
+    4 => [4 => 'project-member'],
 ];
 
+$groupRoles = new FakeProjectGroupRoleModel();
+$groupRoles->members = [2 => [5]];
+
 $perm = new FakeProjectPermissionModel();
-$perm->projectIdsByUser = [2 => [1, 2, 3], 3 => [1]];
+$perm->projectIdsByUser = [2 => [1, 2, 3], 3 => [1], 4 => [4]];
 
 $projects = new FakeProjectModel();
 $projects->projects = [
@@ -209,6 +240,7 @@ $taskCreation = new FakeTaskCreationModel();
 $container = new ArrayObject([
     'userModel' => $users,
     'projectUserRoleModel' => $roles,
+    'projectGroupRoleModel' => $groupRoles,
     'projectPermissionModel' => $perm,
     'projectModel' => $projects,
     'taskFinderModel' => $finder,
@@ -220,9 +252,10 @@ $container = new ArrayObject([
 
 // --- unrestricted token (legacy behaviour) ----------------------------------
 
-$server = new McpServer(new ArrayObject(['projectModel' => $projects, 'columnModel' => $columns, 'taskFinderModel' => $finder, 'taskModel' => new FakeTaskModel()]));
+$server = new McpServer(new ArrayObject(['projectModel' => $projects, 'columnModel' => $columns, 'taskFinderModel' => $finder, 'taskModel' => new FakeTaskModel(), 'userModel' => $users]));
 $res = callTool($server, 'get_projects');
 check(count($res['data']) === 4, 'unrestricted token lists every project');
+check(array_column(callTool($server, 'get_users')['data'], 'id') === [1, 2, 3, 4, 5], 'unrestricted token lists every user without any permission model');
 $res = callTool($server, 'create_column', ['project_id' => 4, 'title' => 'x']);
 check($res['isError'] === false, 'unrestricted token can create a column without any permission model in the container');
 $res = callTool($server, 'delete_task', ['task_id' => 41]);
@@ -236,6 +269,14 @@ check(array_column($res['data'], 'id') === [1, 2, 3], 'bound user only lists the
 
 $resource = $bob->handleRequest(['jsonrpc' => '2.0', 'id' => 1, 'method' => 'resources/read', 'params' => ['uri' => 'kanboard://projects']]);
 check(array_column(json_decode($resource['result']['contents'][0]['text'], true), 'id') === [1, 2, 3], 'projects resource is filtered too');
+
+check(array_column(callTool($bob, 'get_users')['data'], 'id') === [2, 3, 5], 'bound user only lists members of their projects (direct and via group), never users of foreign projects');
+$resource = $bob->handleRequest(['jsonrpc' => '2.0', 'id' => 1, 'method' => 'resources/read', 'params' => ['uri' => 'kanboard://users']]);
+check(array_column(json_decode($resource['result']['contents'][0]['text'], true), 'id') === [2, 3, 5], 'users resource is filtered too');
+check(array_column(callTool(new McpServer($container, 4), 'get_users')['data'], 'id') === [4], 'a user alone on their project sees only themselves');
+$projects->projects[1]['is_everybody_allowed'] = 1;
+check(array_column(callTool($bob, 'get_users')['data'], 'id') === [1, 2, 3, 4, 5], 'a project open to everybody makes every user visible');
+unset($projects->projects[1]['is_everybody_allowed']);
 
 check(callTool($bob, 'get_columns', ['project_id' => 1])['isError'] === false, 'member can read columns');
 check(callTool($bob, 'get_columns', ['project_id' => 2])['isError'] === false, 'viewer can read columns');
@@ -277,6 +318,7 @@ check(!isset($projects->lastCreate[0]['is_private']), 'app-manager may create a 
 
 $admin = new McpServer($container, 1);
 check(count(callTool($admin, 'get_projects')['data']) === 4, 'admin-bound token lists every project');
+check(array_column(callTool($admin, 'get_users')['data'], 'id') === [1, 2, 3, 4, 5], 'admin-bound token lists every user');
 check(callTool($admin, 'create_column', ['project_id' => 4, 'title' => 'c'])['isError'] === false, 'admin-bound token can manage any project');
 
 echo "\n$checks checks, $failures failed\n";
