@@ -40,4 +40,6 @@ return array(
     'Act as user' => 'Act as user',
     'Unrestricted (no user, all projects)' => 'Unrestricted (no user, all projects)',
     'The MCP client gets exactly the project access and roles of the selected user. Tasks and comments are attributed to that user.' => 'The MCP client gets exactly the project access and roles of the selected user. Tasks and comments are attributed to that user.',
+    'Generate MCP token' => 'Generate MCP token',
+    'The current token stops working as soon as a new one is generated.' => 'The current token stops working as soon as a new one is generated.',
 );
