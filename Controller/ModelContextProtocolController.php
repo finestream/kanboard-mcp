@@ -38,6 +38,14 @@ class ModelContextProtocolController extends Base
      */
     public function handle()
     {
+        // MCP is stateless (bearer token on every request): keep $_SESSION in
+        // memory but never persist it. Saving it raced on the sessions table
+        // when several clients connected at once ("database is locked" on
+        // SQLite), and would let a token rewrite a browser's login session.
+        if (session_status() === PHP_SESSION_ACTIVE) {
+            session_abort();
+        }
+
         // Cross-origin browser requests are only answered for the server's own
         // origin; a wildcard would advertise the endpoint to every site.
         if (!$this->isValidOrigin()) {
